@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "227929817804",
+    "project_id": "potokopi",
+    "storage_bucket": "potokopi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:227929817804:android:76620d2e4363457985b869",
+        "android_client_info": {
+          "package_name": "com.example.porina"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjQLm0_7X7dsglrX2h8IA2d27UN68WiE8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
