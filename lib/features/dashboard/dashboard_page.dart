@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
+import '../../utils/notification_helper.dart';
 import '../keranjang/cart_page.dart';
 import '../pesanan/order_page.dart';
 import 'views/home_view.dart';
@@ -17,22 +19,39 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   int selectedIndex = 0;
 
+  final Set<String> _knownOutOfStock = {};
+  final Set<String> _knownLowStock = {};
+  bool _isFirstLoad = true;
+  StreamSubscription<QuerySnapshot>? _barangSubscription;
+
   // ==================== CART ====================
 
   List<Map<String, dynamic>> cart = [];
 
-  void addToCart(String name, int price) {
+  void addToCart(String name, int price, int stock) {
     int index = cart.indexWhere(
       (item) => item['name'] == name,
     );
 
     if (index >= 0) {
-      cart[index]['qty'] += 1;
+      if (cart[index]['qty'] < stock) {
+        cart[index]['qty'] += 1;
+      } else {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Gagal: Batas stok tercapai! Maksimal: $stock"),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
     } else {
       cart.add({
         'name': name,
         'price': price,
         'qty': 1,
+        'stock': stock,
       });
     }
 
@@ -82,8 +101,20 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void onAdd(int index) {
-    cart[index]['qty'] += 1;
-    setState(() {});
+    final item = cart[index];
+    final int stock = item['stock'] ?? 0;
+    if (item['qty'] < stock) {
+      cart[index]['qty'] += 1;
+      setState(() {});
+    } else {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Batas stok tercapai! Maksimal: $stock"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   void onRemove(int index) {
@@ -93,6 +124,11 @@ class _DashboardPageState extends State<DashboardPage> {
       cart.removeAt(index);
     }
 
+    setState(() {});
+  }
+
+  void onQtyChanged(int index, int newQty) {
+    cart[index]['qty'] = newQty;
     setState(() {});
   }
 
@@ -116,6 +152,88 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     fetchCategories();
+    
+    // Request notification permissions
+    print("DashboardPage: requesting notification permissions...");
+    NotificationHelper().requestPermissions().then((_) {
+      print("DashboardPage: permissions request completed.");
+    }).catchError((e) {
+      print("DashboardPage: permissions request failed: $e");
+    });
+
+    // Listen to barang stock changes for local push alerts (out of stock & low stock)
+    print("DashboardPage: initializing Firestore barang listener...");
+    _barangSubscription = FirebaseFirestore.instance
+        .collection('barang')
+        .snapshots()
+        .listen((snapshot) {
+      print("DashboardPage: Firestore barang stream updated with ${snapshot.docs.length} docs.");
+      final List<String> currentOutOfStock = [];
+      final Map<String, int> currentLowStock = {};
+      
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final name = data['name'] as String? ?? '';
+        final stock = data['stock'] as int? ?? 0;
+        
+        if (name.isNotEmpty) {
+          if (stock == 0) {
+            currentOutOfStock.add(name);
+          } else if (stock <= 10) {
+            currentLowStock[name] = stock;
+          }
+        }
+      }
+
+      print("DashboardPage: FirstLoad=$_isFirstLoad, currentOutOfStock=$currentOutOfStock, currentLowStock=${currentLowStock.keys.toList()}");
+
+      if (_isFirstLoad) {
+        _knownOutOfStock.addAll(currentOutOfStock);
+        _knownLowStock.addAll(currentLowStock.keys);
+        _isFirstLoad = false;
+        print("DashboardPage: Initial sets populated. OutOfStock=$_knownOutOfStock, LowStock=$_knownLowStock");
+      } else {
+        // 1. Process Out of Stock items
+        for (var name in currentOutOfStock) {
+          if (!_knownOutOfStock.contains(name)) {
+            print("DashboardPage: Triggering OUT OF STOCK notification for $name");
+            NotificationHelper().showNotification(
+              "🚨 Stok Habis!",
+              "Barang '$name' telah habis stoknya.",
+            );
+            _knownOutOfStock.add(name);
+            _knownLowStock.remove(name);
+          }
+        }
+        
+        // 2. Process Low Stock items
+        for (var entry in currentLowStock.entries) {
+          final name = entry.key;
+          final stock = entry.value;
+          if (!_knownLowStock.contains(name) && !_knownOutOfStock.contains(name)) {
+            print("DashboardPage: Triggering LOW STOCK notification for $name");
+            NotificationHelper().showNotification(
+              "⚠️ Stok Menipis!",
+              "Barang '$name' hampir habis. Sisa stok: $stock.",
+            );
+            _knownLowStock.add(name);
+          }
+        }
+        
+        // Cleanup refilled items
+        _knownOutOfStock.removeWhere((name) => !currentOutOfStock.contains(name));
+        _knownLowStock.removeWhere((name) => !currentLowStock.containsKey(name));
+        print("DashboardPage: Updated sets: OutOfStock=$_knownOutOfStock, LowStock=$_knownLowStock");
+      }
+    }, onError: (error) {
+      print("DashboardPage Firestore Stream Error: $error");
+    });
+  }
+
+  @override
+  void dispose() {
+    _barangSubscription?.cancel();
+    super.dispose();
   }
 
   // ==================== BUILD ====================
@@ -266,6 +384,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         cart: cart,
                         onAdd: onAdd,
                         onRemove: onRemove,
+                        onQtyChanged: onQtyChanged,
                       )
                     : selectedIndex == 3
                         ? const PesananPage()

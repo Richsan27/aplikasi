@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 // ==================== FIRESTORE HELPERS ====================
 
@@ -8,6 +9,7 @@ Future<void> addBarang(
   int stock,
   int price,
   String category,
+  DateTime tanggalMasuk,
 ) async {
   if (name.isEmpty) return;
 
@@ -16,6 +18,7 @@ Future<void> addBarang(
     'stock': stock,
     'price': price,
     'category': category,
+    'tanggal_masuk': Timestamp.fromDate(tanggalMasuk),
     'created_at': Timestamp.now(),
   });
 }
@@ -26,12 +29,14 @@ Future<void> updateBarang(
   int stock,
   int price,
   String category,
+  DateTime tanggalMasuk,
 ) async {
   await FirebaseFirestore.instance.collection('barang').doc(docId).update({
     'name': name,
     'stock': stock,
     'price': price,
     'category': category,
+    'tanggal_masuk': Timestamp.fromDate(tanggalMasuk),
   });
 }
 
@@ -63,6 +68,7 @@ void showAddBarangDialog({
     dropdownItems.add('Tanpa Kategori');
   }
   String selectedCategory = dropdownItems.first;
+  DateTime selectedTanggalMasuk = DateTime.now();
 
   showDialog(
     context: context,
@@ -196,6 +202,80 @@ void showAddBarangDialog({
                       });
                     },
                   ),
+                  const SizedBox(height: 14),
+
+                  InkWell(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedTanggalMasuk,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: Color(0xFFFDBA31),
+                                onPrimary: Color(0xFF1E1E24),
+                                onSurface: Color(0xFF1E1E24),
+                              ),
+                              textButtonTheme: TextButtonThemeData(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFFFFA000),
+                                ),
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null && picked != selectedTanggalMasuk) {
+                        setStateDialog(() {
+                          selectedTanggalMasuk = picked;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Ink(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F8FA),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Tanggal Masuk",
+                                style: TextStyle(
+                                  color: Color(0xFF6B7280),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                DateFormat('dd MMMM yyyy').format(selectedTanggalMasuk),
+                                style: const TextStyle(
+                                  color: Color(0xFF1E1E24),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Icon(
+                            Icons.calendar_today_rounded,
+                            color: Color(0xFF6B7280),
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -235,6 +315,7 @@ void showAddBarangDialog({
                       int.tryParse(stockController.text) ?? 0,
                       int.tryParse(priceController.text) ?? 0,
                       selectedCategory,
+                      selectedTanggalMasuk,
                     );
                     if (context.mounted) {
                       Navigator.pop(context);
@@ -428,6 +509,10 @@ void showEditBarangDialog({
     }
   }
 
+  DateTime selectedTanggalMasuk = data['tanggal_masuk'] != null
+      ? (data['tanggal_masuk'] as Timestamp).toDate()
+      : (data['created_at'] != null ? (data['created_at'] as Timestamp).toDate() : DateTime.now());
+
   showDialog(
     context: context,
     builder: (context) {
@@ -560,6 +645,80 @@ void showEditBarangDialog({
                       });
                     },
                   ),
+                  const SizedBox(height: 14),
+
+                  InkWell(
+                    onTap: () async {
+                      final DateTime? picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedTanggalMasuk,
+                        firstDate: DateTime(2000),
+                        lastDate: DateTime(2100),
+                        builder: (context, child) {
+                          return Theme(
+                            data: Theme.of(context).copyWith(
+                              colorScheme: const ColorScheme.light(
+                                primary: Color(0xFFFDBA31),
+                                onPrimary: Color(0xFF1E1E24),
+                                onSurface: Color(0xFF1E1E24),
+                              ),
+                              textButtonTheme: TextButtonThemeData(
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFFFFA000),
+                                ),
+                              ),
+                            ),
+                            child: child!,
+                          );
+                        },
+                      );
+                      if (picked != null && picked != selectedTanggalMasuk) {
+                        setStateDialog(() {
+                          selectedTanggalMasuk = picked;
+                        });
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Ink(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF7F8FA),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Tanggal Masuk",
+                                style: TextStyle(
+                                  color: Color(0xFF6B7280),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                DateFormat('dd MMMM yyyy').format(selectedTanggalMasuk),
+                                style: const TextStyle(
+                                  color: Color(0xFF1E1E24),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Icon(
+                            Icons.calendar_today_rounded,
+                            color: Color(0xFF6B7280),
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -600,6 +759,7 @@ void showEditBarangDialog({
                       int.tryParse(stockController.text) ?? 0,
                       int.tryParse(priceController.text) ?? 0,
                       selectedCategory,
+                      selectedTanggalMasuk,
                     );
                     if (context.mounted) {
                       Navigator.pop(context);

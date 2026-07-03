@@ -5,12 +5,14 @@ class CartPage extends StatefulWidget {
   final List<Map<String, dynamic>> cart;
   final Function(int index) onAdd;
   final Function(int index) onRemove;
+  final Function(int index, int newQty) onQtyChanged;
 
   const CartPage({
     super.key,
     required this.cart,
     required this.onAdd,
     required this.onRemove,
+    required this.onQtyChanged,
   });
 
   @override
@@ -20,32 +22,209 @@ class CartPage extends StatefulWidget {
 class _CartPageState extends State<CartPage> {
 
   Future<void> checkout(int total) async {
-
     if (widget.cart.isEmpty) return;
 
-    await FirebaseFirestore.instance
-        .collection('pesanan')
-        .add({
-      'invoice':
-          'INV-${DateTime.now().millisecondsSinceEpoch}',
-      'total': total,
-      'items': widget.cart,
-      'created_at': Timestamp.now(),
-    });
-
-    widget.cart.clear();
-
-    if (mounted) {
-      setState(() {});
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Checkout berhasil',
-          ),
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFFFDBA31),
         ),
-      );
+      ),
+    );
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+
+      // First, strictly validate stock levels of all items in Firestore before applying modifications
+      for (var item in widget.cart) {
+        final String name = item['name'] ?? '';
+        final int qty = item['qty'] ?? 0;
+
+        final barangQuery = await FirebaseFirestore.instance
+            .collection('barang')
+            .where('name', isEqualTo: name)
+            .limit(1)
+            .get();
+
+        if (barangQuery.docs.isNotEmpty) {
+          final doc = barangQuery.docs.first;
+          final currentStock = doc['stock'] as int? ?? 0;
+          
+          if (qty > currentStock) {
+            if (mounted) {
+              Navigator.pop(context); // Close loading dialog
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Checkout Gagal: Stok tidak mencukupi untuk "$name". Tersisa: $currentStock'),
+                  backgroundColor: Colors.red,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+            return; // Abort checkout process
+          }
+          
+          final newStock = (currentStock - qty).clamp(0, 999999).toInt();
+          batch.update(doc.reference, {'stock': newStock});
+        } else {
+          if (mounted) {
+            Navigator.pop(context); // Close loading dialog
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Checkout Gagal: Barang "$name" tidak ditemukan di database.'),
+                backgroundColor: Colors.red,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      // Add the order
+      final newOrderRef = FirebaseFirestore.instance.collection('pesanan').doc();
+      batch.set(newOrderRef, {
+        'invoice': 'INV-${DateTime.now().millisecondsSinceEpoch}',
+        'total': total,
+        'items': widget.cart.map((e) => Map<String, dynamic>.from(e)).toList(),
+        'created_at': Timestamp.now(),
+      });
+
+      await batch.commit();
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+      }
+
+      // Clear local cart
+      widget.cart.clear();
+
+      if (mounted) {
+        setState(() {});
+
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Checkout berhasil dan stok telah diperbarui',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Terjadi kesalahan: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
+  }
+
+  void _showEditQtyDialog(int index, int currentQty, int stock, String name) {
+    final controller = TextEditingController(text: currentQty.toString());
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Text(
+            "Ubah Jumlah - $name",
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E1E24),
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Stok tersedia: $stock",
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: "Masukkan jumlah...",
+                  filled: true,
+                  fillColor: const Color(0xFFF7F8FA),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFFDBA31), width: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                "Batal",
+                style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFDBA31),
+                foregroundColor: const Color(0xFF1E1E24),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+              onPressed: () {
+                final input = int.tryParse(controller.text);
+                if (input == null || input <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Jumlah tidak valid")),
+                  );
+                  return;
+                }
+                if (input > stock) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Batas stok tercapai! Maksimal: $stock"),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                
+                widget.onQtyChanged(index, input);
+                Navigator.pop(context);
+              },
+              child: const Text(
+                "Simpan",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -224,12 +403,29 @@ class _CartPageState extends State<CartPage> {
                                   
                                   const SizedBox(width: 12),
                                   
-                                  Text(
-                                    "$qty",
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1E1E24),
+                                  GestureDetector(
+                                    onTap: () {
+                                      final int stock = item['stock'] ?? 999;
+                                      _showEditQtyDialog(index, qty, stock, item['name'] ?? '');
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF3F4F6),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: const Color(0xFFE5E7EB),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        "$qty",
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF1E1E24),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                   

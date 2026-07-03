@@ -17,8 +17,7 @@ class HomeView extends StatefulWidget {
 }
 
 class _HomeViewState extends State<HomeView> {
-  final int lowStockLimit = 5;
-  bool alreadyShownWarning = false;
+  final int lowStockLimit = 10;
 
   @override
   Widget build(BuildContext context) {
@@ -357,25 +356,7 @@ class _HomeViewState extends State<HomeView> {
                     return stock <= lowStockLimit;
                   }).toList();
 
-                  if (lowStockItems.isNotEmpty && !alreadyShownWarning) {
-                    alreadyShownWarning = true;
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          backgroundColor: const Color(0xFFE11D48),
-                          behavior: SnackBarBehavior.floating,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          content: Text(
-                            "⚠ Ada ${lowStockItems.length} barang dengan stok menipis!",
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      );
-                    });
-                  }
-
                   if (lowStockItems.isEmpty) {
-                    alreadyShownWarning = false;
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       padding: const EdgeInsets.all(16),
