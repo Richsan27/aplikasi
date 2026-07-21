@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:porina/utils/bluetooth_printer_helper.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class DetailPesananPage extends StatelessWidget {
   final Map<String, dynamic> orderData;
@@ -36,6 +38,106 @@ class DetailPesananPage extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E1E24)),
           onPressed: () => Navigator.pop(context),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.print_rounded, color: Color(0xFFFFA000)),
+            tooltip: 'Cetak Struk Bluetooth',
+            onPressed: () async {
+              final helper = BluetoothPrinterHelper();
+              final isConnected = await helper.checkConnection();
+              if (isConnected) {
+                final success = await helper.printOrderReceipt(orderData);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        success ? 'Struk berhasil dicetak' : 'Gagal mencetak struk',
+                      ),
+                      backgroundColor: success ? const Color(0xFF15803D) : const Color(0xFFE11D48),
+                    ),
+                  );
+                }
+              } else {
+                if (context.mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFFF1F2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.print_disabled_rounded,
+                                color: Color(0xFFE11D48),
+                                size: 36,
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            const Text(
+                              "Printer Belum Terhubung",
+                              style: TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 18,
+                                color: Color(0xFF1E1E24),
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              "Silakan aktifkan Bluetooth dan hubungkan printer Anda terlebih dahulu melalui menu Profil.",
+                              style: TextStyle(
+                                color: Color(0xFF6B7280),
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                        actionsAlignment: MainAxisAlignment.center,
+                        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                        actions: [
+                          SizedBox(
+                            width: 140,
+                            height: 44,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFFFDBA31),
+                                foregroundColor: const Color(0xFF1E1E24),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text(
+                                "OK",
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                }
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SingleChildScrollView(
         physics: const BouncingScrollPhysics(),
@@ -141,8 +243,8 @@ class DetailPesananPage extends StatelessWidget {
 
                     // List of items
                     ...items.map((item) {
-                      final itemPrice = item['price'] ?? 0;
-                      final itemQty = item['qty'] ?? 0;
+                      final itemPrice = (item['price'] as num?)?.toInt() ?? 0;
+                      final itemQty = (item['qty'] as num?)?.toInt() ?? 0;
                       final itemSubtotal = itemPrice * itemQty;
 
                       return Padding(
@@ -214,6 +316,45 @@ class DetailPesananPage extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 20),
+                    const DashedDivider(),
+                    const SizedBox(height: 20),
+
+                    // Visual QR Code
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFE5E7EB),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: QrImageView(
+                          data: () {
+                            final helper = BluetoothPrinterHelper();
+                            final date = createdAt.toDate();
+                            return helper.generateReceiptUrl(invoice, date, items, total);
+                          }(),
+                          version: QrVersions.auto,
+                          size: 140.0,
+                          gapless: false,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Center(
+                      child: Text(
+                        "Scan QR untuk melihat rincian",
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF9CA3AF),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),

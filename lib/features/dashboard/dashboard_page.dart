@@ -153,12 +153,14 @@ class _DashboardPageState extends State<DashboardPage> {
     super.initState();
     fetchCategories();
     
-    // Request notification permissions
-    print("DashboardPage: requesting notification permissions...");
-    NotificationHelper().requestPermissions().then((_) {
-      print("DashboardPage: permissions request completed.");
-    }).catchError((e) {
-      print("DashboardPage: permissions request failed: $e");
+    // Request notification permissions after the first frame is rendered
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      print("DashboardPage: requesting notification permissions post-frame...");
+      NotificationHelper().requestPermissions().then((_) {
+        print("DashboardPage: permissions request completed.");
+      }).catchError((e) {
+        print("DashboardPage: permissions request failed: $e");
+      });
     });
 
     // Listen to barang stock changes for local push alerts (out of stock & low stock)
@@ -174,7 +176,16 @@ class _DashboardPageState extends State<DashboardPage> {
       for (var doc in snapshot.docs) {
         final data = doc.data();
         final name = data['name'] as String? ?? '';
-        final stock = data['stock'] as int? ?? 0;
+        
+        final rawStock = data['stock'];
+        int stock = 0;
+        if (rawStock is int) {
+          stock = rawStock;
+        } else if (rawStock is num) {
+          stock = rawStock.toInt();
+        } else if (rawStock is String) {
+          stock = int.tryParse(rawStock) ?? 0;
+        }
         
         if (name.isNotEmpty) {
           if (stock == 0) {

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:porina/utils/bluetooth_printer_helper.dart';
 
 class CartPage extends StatefulWidget {
   final List<Map<String, dynamic>> cart;
@@ -20,6 +21,13 @@ class CartPage extends StatefulWidget {
 }
 
 class _CartPageState extends State<CartPage> {
+
+  int _parseStock(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
 
   Future<void> checkout(int total) async {
     if (widget.cart.isEmpty) return;
@@ -51,7 +59,7 @@ class _CartPageState extends State<CartPage> {
 
         if (barangQuery.docs.isNotEmpty) {
           final doc = barangQuery.docs.first;
-          final currentStock = doc['stock'] as int? ?? 0;
+          final currentStock = _parseStock(doc['stock']);
           
           if (qty > currentStock) {
             if (mounted) {
@@ -84,13 +92,23 @@ class _CartPageState extends State<CartPage> {
         }
       }
 
+      // Save order details for printing before clearing cart
+      final now = DateTime.now();
+      final invoice = 'INV-${now.millisecondsSinceEpoch}';
+      final orderData = {
+        'invoice': invoice,
+        'total': total,
+        'items': widget.cart.map((e) => Map<String, dynamic>.from(e)).toList(),
+        'created_at': now,
+      };
+
       // Add the order
       final newOrderRef = FirebaseFirestore.instance.collection('pesanan').doc();
       batch.set(newOrderRef, {
-        'invoice': 'INV-${DateTime.now().millisecondsSinceEpoch}',
+        'invoice': invoice,
         'total': total,
-        'items': widget.cart.map((e) => Map<String, dynamic>.from(e)).toList(),
-        'created_at': Timestamp.now(),
+        'items': orderData['items'],
+        'created_at': Timestamp.fromDate(now),
       });
 
       await batch.commit();
@@ -104,15 +122,7 @@ class _CartPageState extends State<CartPage> {
 
       if (mounted) {
         setState(() {});
-
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Checkout berhasil dan stok telah diperbarui',
-            ),
-          ),
-        );
+        _showPrintReceiptDialog(orderData);
       }
     } catch (e) {
       if (mounted) {
@@ -125,6 +135,247 @@ class _CartPageState extends State<CartPage> {
         );
       }
     }
+  }
+
+  void _showPrintReceiptDialog(Map<String, dynamic> order) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        bool isPrinting = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFDCFCE7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle_rounded,
+                      color: Color(0xFF15803D),
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Checkout Berhasil",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 20,
+                      color: Color(0xFF1E1E24),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "Transaksi ${order['invoice']} telah berhasil diproses.",
+                    style: const TextStyle(
+                      color: Color(0xFF6B7280),
+                      fontSize: 13,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 14),
+                  const Divider(color: Color(0xFFE5E7EB)),
+                  const SizedBox(height: 14),
+                  const Text(
+                    "Apakah Anda ingin mencetak struk transaksi ini?",
+                    style: TextStyle(
+                      color: Color(0xFF1E1E24),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actionsAlignment: MainAxisAlignment.spaceEvenly,
+              actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              actions: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: isPrinting ? null : () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF6B7280),
+                            side: const BorderSide(color: Color(0xFFE5E7EB), width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text(
+                            "Tidak",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SizedBox(
+                        height: 44,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFDBA31),
+                            foregroundColor: const Color(0xFF1E1E24),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          onPressed: isPrinting
+                              ? null
+                              : () async {
+                                  setDialogState(() {
+                                    isPrinting = true;
+                                  });
+
+                                  final helper = BluetoothPrinterHelper();
+                                  final isConnected = await helper.checkConnection();
+
+                                  if (isConnected) {
+                                    final success = await helper.printOrderReceipt(order);
+                                    if (context.mounted) {
+                                      Navigator.pop(context); // Close dialog
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            success ? 'Struk berhasil dicetak' : 'Gagal mencetak struk',
+                                          ),
+                                          backgroundColor: success ? const Color(0xFF15803D) : const Color(0xFFE11D48),
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    setDialogState(() {
+                                      isPrinting = false;
+                                    });
+                                    if (context.mounted) {
+                                      _showPrinterNotConnectedAlert();
+                                    }
+                                  }
+                                },
+                          child: isPrinting
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFF1E1E24),
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.print_rounded, size: 18),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      "Cetak",
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showPrinterNotConnectedAlert() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFF1F2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.print_disabled_rounded,
+                  color: Color(0xFFE11D48),
+                  size: 36,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "Printer Belum Terhubung",
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  color: Color(0xFF1E1E24),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "Silakan aktifkan Bluetooth dan hubungkan printer Anda terlebih dahulu melalui menu Profil.",
+                style: TextStyle(
+                  color: Color(0xFF6B7280),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          actions: [
+            SizedBox(
+              width: 140,
+              height: 44,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFDBA31),
+                  foregroundColor: const Color(0xFF1E1E24),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  "OK",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showEditQtyDialog(int index, int currentQty, int stock, String name) {
@@ -232,7 +483,9 @@ class _CartPageState extends State<CartPage> {
     int total = 0;
 
     for (var item in widget.cart) {
-      total += (item['price'] as int) * (item['qty'] as int);
+      final int price = (item['price'] as num?)?.toInt() ?? 0;
+      final int qty = (item['qty'] as num?)?.toInt() ?? 0;
+      total += price * qty;
     }
 
     return Scaffold(
@@ -306,8 +559,8 @@ class _CartPageState extends State<CartPage> {
                     itemCount: widget.cart.length,
                     itemBuilder: (context, index) {
                       final item = widget.cart[index];
-                      final price = item['price'] as int;
-                      final qty = item['qty'] as int;
+                      final price = (item['price'] as num?)?.toInt() ?? 0;
+                      final qty = (item['qty'] as num?)?.toInt() ?? 0;
                       final itemTotal = price * qty;
 
                       return Container(

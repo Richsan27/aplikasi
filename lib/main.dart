@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'features/auth/login_page.dart';
 import 'features/dashboard/dashboard_page.dart';
 import 'utils/notification_helper.dart';
+import 'utils/bluetooth_printer_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +16,9 @@ void main() async {
 
   // Initialize notification helper
   await NotificationHelper().init();
+
+  // Initialize bluetooth printer helper
+  await BluetoothPrinterHelper().init();
 
   runApp(const MyApp());
 }

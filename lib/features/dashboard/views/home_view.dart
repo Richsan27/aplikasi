@@ -18,6 +18,7 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> {
   final int lowStockLimit = 10;
+  bool _showAllLowStock = false;
 
   @override
   Widget build(BuildContext context) {
@@ -111,102 +112,7 @@ class _HomeViewState extends State<HomeView> {
                 ),
               ),
 
-              // Main Custom Chart Card
-              Container(
-                height: 190,
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF5E7E), Color(0xFFFF7B97)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFFF5E7E).withOpacity(0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 70, 16, 20),
-                        child: CustomPaint(
-                          painter: WavyChartPainter(),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 22,
-                      left: 22,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Statistik Penjualan Mingguan",
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.85),
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            "Rp 3.4M",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 32,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 20,
-                      right: 20,
-                      child: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.arrow_outward_rounded,
-                          color: Color(0xFFFF5E7E),
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 22,
-                      right: 22,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Text(
-                          "Live Cost",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
 
               // Multi-Stat Grid Card row
               Padding(
@@ -218,15 +124,15 @@ class _HomeViewState extends State<HomeView> {
                       child: Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF4FACFE), Color(0xFF00F2FE)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFFE5E7EB).withOpacity(0.5),
+                            width: 1.5,
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF4FACFE).withOpacity(0.2),
+                              color: Colors.black.withOpacity(0.015),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -240,7 +146,7 @@ class _HomeViewState extends State<HomeView> {
                                 const Text(
                                   "Total Stok",
                                   style: TextStyle(
-                                    color: Colors.white70,
+                                    color: Color(0xFF6B7280),
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -249,7 +155,7 @@ class _HomeViewState extends State<HomeView> {
                                 Text(
                                   "$totalStock",
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: Color(0xFF1E1E24),
                                     fontSize: 28,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -260,16 +166,16 @@ class _HomeViewState extends State<HomeView> {
                               top: 0,
                               right: 0,
                               child: Container(
-                                width: 28,
-                                height: 28,
+                                width: 32,
+                                height: 32,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.25),
+                                  color: const Color(0xFF4FACFE).withOpacity(0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.inventory_rounded,
-                                  color: Colors.white,
-                                  size: 14,
+                                  color: Color(0xFF0072FF),
+                                  size: 16,
                                 ),
                               ),
                             ),
@@ -283,15 +189,15 @@ class _HomeViewState extends State<HomeView> {
                       child: Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF43E97B), Color(0xFF38F9D7)],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFFE5E7EB).withOpacity(0.5),
+                            width: 1.5,
+                          ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF43E97B).withOpacity(0.2),
+                              color: Colors.black.withOpacity(0.015),
                               blurRadius: 10,
                               offset: const Offset(0, 4),
                             ),
@@ -305,7 +211,7 @@ class _HomeViewState extends State<HomeView> {
                                 const Text(
                                   "Jenis Barang",
                                   style: TextStyle(
-                                    color: Colors.white70,
+                                    color: Color(0xFF6B7280),
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -314,7 +220,7 @@ class _HomeViewState extends State<HomeView> {
                                 Text(
                                   "$totalJenis",
                                   style: const TextStyle(
-                                    color: Colors.white,
+                                    color: Color(0xFF1E1E24),
                                     fontSize: 28,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -325,16 +231,16 @@ class _HomeViewState extends State<HomeView> {
                               top: 0,
                               right: 0,
                               child: Container(
-                                width: 28,
-                                height: 28,
+                                width: 32,
+                                height: 32,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.25),
+                                  color: const Color(0xFF43E97B).withOpacity(0.1),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.category_rounded,
-                                  color: Colors.white,
-                                  size: 14,
+                                  color: Color(0xFF1B5E20),
+                                  size: 16,
                                 ),
                               ),
                             ),
@@ -384,6 +290,10 @@ class _HomeViewState extends State<HomeView> {
                       ),
                     );
                   }
+
+                  final displayedItems = _showAllLowStock
+                      ? lowStockItems
+                      : lowStockItems.take(10).toList();
 
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -455,14 +365,14 @@ class _HomeViewState extends State<HomeView> {
                         ListView.separated(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
-                          itemCount: lowStockItems.length,
+                          itemCount: displayedItems.length,
                           separatorBuilder: (context, index) => const Divider(
                             height: 24,
                             color: Color(0xFFF3F4F6),
                             thickness: 1.5,
                           ),
                           itemBuilder: (context, idx) {
-                            final data = lowStockItems[idx].data() as Map<String, dynamic>;
+                            final data = displayedItems[idx].data() as Map<String, dynamic>;
                             final stock = data['stock'] ?? 0;
                             return Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -511,6 +421,41 @@ class _HomeViewState extends State<HomeView> {
                             );
                           },
                         ),
+                        if (lowStockItems.length > 10) ...[
+                          const SizedBox(height: 16),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _showAllLowStock = !_showAllLowStock;
+                                });
+                              },
+                              icon: Icon(
+                                _showAllLowStock
+                                    ? Icons.keyboard_arrow_up_rounded
+                                    : Icons.keyboard_arrow_down_rounded,
+                                color: const Color(0xFFFFA000),
+                              ),
+                              label: Text(
+                                _showAllLowStock
+                                    ? "Tampilkan Lebih Sedikit"
+                                    : "Lihat Semua (${lowStockItems.length})",
+                                style: const TextStyle(
+                                  color: Color(0xFFFFA000),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                backgroundColor: const Color(0xFFFDBA31).withOpacity(0.08),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   );

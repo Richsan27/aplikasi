@@ -16,6 +16,7 @@ class PesananPage extends StatefulWidget {
 class _PesananPageState extends State<PesananPage> {
   String selectedRecapFilter = 'Semua';
   List<QueryDocumentSnapshot> _currentOrders = [];
+  int _ordersLimit = 10;
 
   Widget buildFilterPill(String filterName) {
     bool isSelected = selectedRecapFilter == filterName;
@@ -23,6 +24,7 @@ class _PesananPageState extends State<PesananPage> {
       onTap: () {
         setState(() {
           selectedRecapFilter = filterName;
+          _ordersLimit = 10; // Reset limit when filter changes
         });
       },
       child: Container(
@@ -213,7 +215,7 @@ class _PesananPageState extends State<PesananPage> {
     int grandTotal = 0;
     for (var order in orders) {
       final data = order.data() as Map<String, dynamic>;
-      grandTotal += (data['total'] ?? 0) as int;
+      grandTotal += ((data['total'] ?? 0) as num).toInt();
     }
 
     pdf.addPage(
@@ -556,8 +558,41 @@ class _PesananPageState extends State<PesananPage> {
                     Expanded(
                       child: ListView.builder(
                         physics: const BouncingScrollPhysics(),
-                        itemCount: filteredOrders.length,
+                        itemCount: filteredOrders.length > _ordersLimit
+                            ? _ordersLimit + 1
+                            : filteredOrders.length,
                         itemBuilder: (context, index) {
+                          if (index == _ordersLimit) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 16.0),
+                              child: Center(
+                                child: TextButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _ordersLimit += 10;
+                                    });
+                                  },
+                                  icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFFFA000)),
+                                  label: const Text(
+                                    "Muat Lebih Banyak",
+                                    style: TextStyle(
+                                      color: Color(0xFFFFA000),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFDBA31).withOpacity(0.08),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }
+
                           final order = filteredOrders[index];
                           final orderData = order.data() as Map<String, dynamic>;
                           final total = orderData['total'] ?? 0;

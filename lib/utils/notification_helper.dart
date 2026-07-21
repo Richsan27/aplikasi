@@ -1,4 +1,5 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class NotificationHelper {
   static final NotificationHelper _instance = NotificationHelper._internal();
@@ -10,7 +11,7 @@ class NotificationHelper {
 
   Future<void> init() async {
     try {
-      print("NotificationHelper: Initializing plugin...");
+      print("NotificationHelper: Initializing plugin with custom icon...");
       const AndroidInitializationSettings initializationSettingsAndroid =
           AndroidInitializationSettings('ic_notification');
 
@@ -21,21 +22,42 @@ class NotificationHelper {
       final initialized = await flutterLocalNotificationsPlugin.initialize(
         settings: initializationSettings,
       );
-      print("NotificationHelper: Plugin initialized successfully: $initialized");
+      print("NotificationHelper: Plugin initialized: $initialized");
+      if (initialized != true) {
+        throw Exception("Initialization returned false");
+      }
     } catch (e) {
-      print("NotificationHelper Error: failed to initialize: $e");
+      print("NotificationHelper: Failed to initialize with custom icon, falling back to launcher icon. Error: $e");
+      try {
+        const AndroidInitializationSettings initializationSettingsAndroid =
+            AndroidInitializationSettings('@mipmap/ic_launcher');
+
+        const InitializationSettings initializationSettings = InitializationSettings(
+          android: initializationSettingsAndroid,
+        );
+
+        final initialized = await flutterLocalNotificationsPlugin.initialize(
+          settings: initializationSettings,
+        );
+        print("NotificationHelper: Plugin initialized with fallback launcher icon: $initialized");
+      } catch (fallbackError) {
+        print("NotificationHelper Error: failed fallback initialization: $fallbackError");
+      }
     }
   }
 
   Future<void> requestPermissions() async {
     try {
-      print("NotificationHelper: Requesting permissions...");
+      print("NotificationHelper: Requesting permissions via permission_handler...");
+      final handlerStatus = await Permission.notification.request();
+      print("NotificationHelper: permission_handler status: $handlerStatus");
+
       final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
           flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
       if (androidImplementation != null) {
         final granted = await androidImplementation.requestNotificationsPermission();
-        print("NotificationHelper: Android permissions status: $granted");
+        print("NotificationHelper: Android plugin permissions status: $granted");
       } else {
         print("NotificationHelper: Android implementation was null!");
       }
@@ -55,7 +77,6 @@ class NotificationHelper {
         importance: Importance.max,
         priority: Priority.high,
         ticker: 'ticker',
-        icon: 'ic_notification',
       );
 
       const NotificationDetails notificationDetails = NotificationDetails(

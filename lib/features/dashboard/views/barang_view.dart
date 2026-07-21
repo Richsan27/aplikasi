@@ -4,6 +4,13 @@ import 'package:intl/intl.dart';
 import '../widgets/add_to_cart_button.dart';
 import '../widgets/barang_dialogs.dart';
 
+int _parseStock(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value) ?? 0;
+  return 0;
+}
+
 class BarangView extends StatefulWidget {
   final List<String> categories;
   final VoidCallback onCategoryAdded;
@@ -23,12 +30,14 @@ class BarangView extends StatefulWidget {
 class _BarangViewState extends State<BarangView> {
   String selectedCategoryFilter = 'Semua';
   final int lowStockLimit = 10;
+  int _productsLimit = 10;
 
   Widget categoryPill(String categoryName, bool isSelected) {
     return GestureDetector(
       onTap: () {
         setState(() {
           selectedCategoryFilter = categoryName;
+          _productsLimit = 10; // Reset limit when category changes
         });
       },
       child: Container(
@@ -90,7 +99,7 @@ class _BarangViewState extends State<BarangView> {
         // Find all out-of-stock items (stock == 0) across the entire inventory
         final outOfStockItems = allBarang.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          return (data['stock'] ?? 0) == 0;
+          return _parseStock(data['stock']) == 0;
         }).toList();
 
         return StreamBuilder<QuerySnapshot>(
@@ -113,7 +122,7 @@ class _BarangViewState extends State<BarangView> {
 
               for (var item in itemsList) {
                 final name = item['name'] as String? ?? '';
-                final qty = item['qty'] as int? ?? 0;
+                final qty = (item['qty'] as num?)?.toInt() ?? 0;
                 if (name.isNotEmpty) {
                   productSalesCount[name] = (productSalesCount[name] ?? 0) + qty;
                   if (orderDate != null) {
@@ -146,8 +155,8 @@ class _BarangViewState extends State<BarangView> {
               final aData = a.data() as Map<String, dynamic>;
               final bData = b.data() as Map<String, dynamic>;
               
-              final aStock = aData['stock'] as int? ?? 0;
-              final bStock = bData['stock'] as int? ?? 0;
+              final aStock = _parseStock(aData['stock']);
+              final bStock = _parseStock(bData['stock']);
               final aIsOutOfStock = aStock == 0;
               final bIsOutOfStock = bStock == 0;
               
@@ -327,14 +336,47 @@ class _BarangViewState extends State<BarangView> {
                         )
                       : ListView.builder(
                           physics: const BouncingScrollPhysics(),
-                          itemCount: filteredBarang.length,
+                          itemCount: filteredBarang.length > _productsLimit
+                              ? _productsLimit + 1
+                              : filteredBarang.length,
                           itemBuilder: (context, index) {
+                            if (index == _productsLimit) {
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                                child: Center(
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        _productsLimit += 10;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFFFFA000)),
+                                    label: const Text(
+                                      "Muat Lebih Banyak",
+                                      style: TextStyle(
+                                        color: Color(0xFFFFA000),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFDBA31).withOpacity(0.08),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
                             final item = filteredBarang[index];
                             final docId = item.id;
                             final map = item.data() as Map<String, dynamic>;
                             final name = map['name'] ?? '';
                             final price = map['price'] ?? 0;
-                            final stock = map['stock'] ?? 0;
+                            final stock = _parseStock(map['stock']);
                             final category = map['category'] ?? '-';
                             
                             final isOutOfStock = stock == 0;

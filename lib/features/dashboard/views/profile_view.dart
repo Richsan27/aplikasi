@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:porina/utils/bluetooth_printer_helper.dart';
+import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 
 const String googleProfileSvg = '''
 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -18,6 +20,105 @@ class ProfileView extends StatefulWidget {
 }
 
 class _ProfileViewState extends State<ProfileView> {
+  List<BluetoothInfo> _devices = [];
+  String? _selectedAddress;
+  bool _isConnected = false;
+  bool _isScanning = false;
+  bool _isConnecting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCurrentConnection();
+  }
+
+  Future<void> _checkCurrentConnection() async {
+    final helper = BluetoothPrinterHelper();
+    final connected = await helper.checkConnection();
+    setState(() {
+      _isConnected = connected;
+      _selectedAddress = helper.savedAddress;
+    });
+    _scanDevices();
+  }
+
+  Future<void> _scanDevices() async {
+    setState(() {
+      _isScanning = true;
+    });
+    final helper = BluetoothPrinterHelper();
+    final devices = await helper.getPairedDevices();
+    setState(() {
+      _devices = devices;
+      _isScanning = false;
+    });
+  }
+
+  Future<void> _toggleConnection() async {
+    if (_selectedAddress == null) return;
+
+    final helper = BluetoothPrinterHelper();
+    if (_isConnected) {
+      setState(() {
+        _isConnecting = true;
+      });
+      await helper.disconnect();
+      setState(() {
+        _isConnected = false;
+        _isConnecting = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Printer terputus')),
+        );
+      }
+    } else {
+      setState(() {
+        _isConnecting = true;
+      });
+      try {
+        final selectedDevice = _devices.firstWhere((d) => d.macAdress == _selectedAddress);
+        final success = await helper.connect(selectedDevice.macAdress, selectedDevice.name);
+        setState(() {
+          _isConnected = success;
+          _isConnecting = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(success ? 'Berhasil terhubung ke ${selectedDevice.name}' : 'Gagal terhubung ke printer'),
+              backgroundColor: success ? const Color(0xFF15803D) : const Color(0xFFE11D48),
+            ),
+          );
+        }
+      } catch (e) {
+        setState(() {
+          _isConnecting = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Gagal terhubung: $e'),
+              backgroundColor: const Color(0xFFE11D48),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _printTest() async {
+    final success = await BluetoothPrinterHelper().printTest();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success ? 'Tes cetak berhasil dikirim' : 'Gagal mencetak tes'),
+          backgroundColor: success ? const Color(0xFF15803D) : const Color(0xFFE11D48),
+        ),
+      );
+    }
+  }
+
   Widget buildProfileInfoRow({
     required IconData icon,
     required String label,
@@ -273,6 +374,184 @@ class _ProfileViewState extends State<ProfileView> {
                   label: "Status Akun",
                   value: "Aktif",
                   valueColor: const Color(0xFF15803D),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // ================= PRINTER BLUETOOTH =================
+          buildCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Printer  Struk ",
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E1E24),
+                      ),
+                    ),
+                    IconButton(
+                      icon: _isScanning
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFFFA000),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.refresh_rounded,
+                              color: Color(0xFFFFA000),
+                            ),
+                      onPressed: _isScanning ? null : _scanDevices,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: _isConnected ? const Color(0xFF15803D) : const Color(0xFFE11D48),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _isConnected
+                            ? "Terkoneksi ke: ${BluetoothPrinterHelper().savedName ?? 'Printer'}"
+                            : "Status: Terputus / Belum Terhubung",
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: _isConnected ? const Color(0xFF15803D) : const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                DropdownButtonFormField<String>(
+                  value: _devices.any((d) => d.macAdress == _selectedAddress) ? _selectedAddress : null,
+                  hint: const Text(
+                    "Pilih Printer Bluetooth...",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF9CA3AF),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.print_outlined, color: Color(0xFF6B7280)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: const BorderSide(color: Color(0xFFFFA000), width: 1.5),
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFFF7F8FA),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  ),
+                  dropdownColor: Colors.white,
+                  items: _devices.map((device) {
+                    return DropdownMenuItem<String>(
+                      value: device.macAdress,
+                      child: Text(
+                        "${device.name} (${device.macAdress})",
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E1E24),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _selectedAddress = val;
+                    });
+                  },
+                ),
+                const SizedBox(height: 18),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isConnected ? const Color(0xFFFFF1F2) : const Color(0xFFFDBA31),
+                          foregroundColor: _isConnected ? const Color(0xFFE11D48) : const Color(0xFF1E1E24),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            side: _isConnected
+                                ? const BorderSide(color: Color(0xFFFECDD3), width: 1.5)
+                                : BorderSide.none,
+                          ),
+                        ),
+                        onPressed: (_selectedAddress == null || _isConnecting) ? null : _toggleConnection,
+                        child: _isConnecting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Color(0xFF1E1E24),
+                                ),
+                              )
+                            : Text(
+                                _isConnected ? "Putuskan" : "Hubungkan",
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                      ),
+                    ),
+                    if (_isConnected) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: const BorderSide(color: Color(0xFFFFA000), width: 1.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          onPressed: _printTest,
+                          child: const Text(
+                            "Tes Struk",
+                            style: TextStyle(
+                              color: Color(0xFFFFA000),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
