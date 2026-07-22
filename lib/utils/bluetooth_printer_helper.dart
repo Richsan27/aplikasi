@@ -3,7 +3,6 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-import 'dart:ui' as ui;
 import 'package:image/image.dart' as img;
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -27,8 +26,8 @@ class BluetoothPrinterHelper {
   String? get savedAddress => _savedAddress;
   String? get savedName => _savedName;
 
-  /// Helper to generate QR Code as an image and return ESC/POS bytes.
-  /// This avoids buffer overflow on printers with long QR code strings.
+  /// Helper to generate QR Code as a pixel-perfect image and return ESC/POS bytes.
+  /// Renders exact 1-bit black & white matrix without anti-aliasing to prevent bold/smudged output on thermal paper.
   Future<List<int>> _generateQrCodeBytes(String data, Generator generator) async {
     try {
       final qrValidationResult = QrValidator.validate(
@@ -39,52 +38,50 @@ class BluetoothPrinterHelper {
       
       if (qrValidationResult.status == QrValidationStatus.valid) {
         final qrCode = qrValidationResult.qrCode!;
-        const double imageSize = 220.0;
-        const double qrSize = 180.0;
-        const double padding = 20.0;
-
-        final painter = QrPainter.withQr(
-          qr: qrCode,
-          eyeStyle: const QrEyeStyle(
-            eyeShape: QrEyeShape.square,
-            color: ui.Color(0xFF000000),
-          ),
-          dataModuleStyle: const QrDataModuleStyle(
-            dataModuleShape: QrDataModuleShape.square,
-            color: ui.Color(0xFF000000),
-          ),
-          gapless: true,
-        );
+        final qrImageMatrix = QrImage(qrCode);
+        final int matrixSize = qrImageMatrix.moduleCount;
+        const int quietZone = 4; // Standard 4-module quiet zone required by QR spec
+        final int totalModules = matrixSize + (quietZone * 2);
         
-        final recorder = ui.PictureRecorder();
-        final canvas = ui.Canvas(recorder);
+        // Target ~180-220px image size for 58mm thermal printers (384 dots printable width)
+        int scale = 5;
+        if (totalModules * 5 > 240) {
+          scale = 4;
+        } else if (totalModules * 5 < 160) {
+          scale = 6;
+        }
         
-        // Draw solid white background with quiet zone (white border)
-        final backgroundPaint = ui.Paint()..color = const ui.Color(0xFFFFFFFF);
-        canvas.drawRect(const ui.Rect.fromLTWH(0, 0, imageSize, imageSize), backgroundPaint);
+        final int imageSize = totalModules * scale;
+        final img.Image qrImage = img.Image(width: imageSize, height: imageSize);
         
-        // Paint QR code inside canvas with padding
-        canvas.translate(padding, padding);
-        painter.paint(canvas, const ui.Size(qrSize, qrSize));
-        
-        final picture = recorder.endRecording();
-        final uiImage = await picture.toImage(imageSize.toInt(), imageSize.toInt());
-        final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
-        
-        if (byteData != null) {
-          final pngBytes = byteData.buffer.asUint8List();
-          final img.Image? decodedImage = img.decodePng(pngBytes);
-          if (decodedImage != null) {
-            // Use generator.image (ESC * command) instead of generator.imageRaster (GS v 0 command)
-            // GS v 0 raster command causes garbled print on most 58mm Bluetooth printers.
-            return generator.image(decodedImage, align: PosAlign.center);
+        // Fill background with solid white
+        for (int y = 0; y < imageSize; y++) {
+          for (int x = 0; x < imageSize; x++) {
+            qrImage.setPixelRgb(x, y, 255, 255, 255);
           }
         }
+        
+        // Draw exact crisp black QR modules (no anti-aliasing, no edge bloating)
+        for (int r = 0; r < matrixSize; r++) {
+          for (int c = 0; c < matrixSize; c++) {
+            if (qrImageMatrix.isDark(r, c)) {
+              final int startX = (c + quietZone) * scale;
+              final int startY = (r + quietZone) * scale;
+              for (int py = 0; py < scale; py++) {
+                for (int px = 0; px < scale; px++) {
+                  qrImage.setPixelRgb(startX + px, startY + py, 0, 0, 0);
+                }
+              }
+            }
+          }
+        }
+        
+        return generator.image(qrImage, align: PosAlign.center);
       }
     } catch (e) {
       print("Error generating QR code image: $e");
     }
-    // Fallback to native ESC/POS QR code command if image rendering fails
+    // Fallback to native ESC/POS QR code command if matrix rendering fails
     return generator.qrcode(data);
   }
 
