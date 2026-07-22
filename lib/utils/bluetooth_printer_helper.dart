@@ -39,6 +39,10 @@ class BluetoothPrinterHelper {
       
       if (qrValidationResult.status == QrValidationStatus.valid) {
         final qrCode = qrValidationResult.qrCode!;
+        const double imageSize = 220.0;
+        const double qrSize = 180.0;
+        const double padding = 20.0;
+
         final painter = QrPainter.withQr(
           qr: qrCode,
           eyeStyle: const QrEyeStyle(
@@ -55,21 +59,25 @@ class BluetoothPrinterHelper {
         final recorder = ui.PictureRecorder();
         final canvas = ui.Canvas(recorder);
         
-        // Draw solid white background first
+        // Draw solid white background with quiet zone (white border)
         final backgroundPaint = ui.Paint()..color = const ui.Color(0xFFFFFFFF);
-        canvas.drawRect(const ui.Rect.fromLTWH(0, 0, 200, 200), backgroundPaint);
+        canvas.drawRect(const ui.Rect.fromLTWH(0, 0, imageSize, imageSize), backgroundPaint);
         
-        // Paint at 200x200 size, suitable for 58mm thermal printers
-        painter.paint(canvas, const ui.Size(200, 200));
+        // Paint QR code inside canvas with padding
+        canvas.translate(padding, padding);
+        painter.paint(canvas, const ui.Size(qrSize, qrSize));
+        
         final picture = recorder.endRecording();
-        final uiImage = await picture.toImage(200, 200);
+        final uiImage = await picture.toImage(imageSize.toInt(), imageSize.toInt());
         final byteData = await uiImage.toByteData(format: ui.ImageByteFormat.png);
         
         if (byteData != null) {
           final pngBytes = byteData.buffer.asUint8List();
           final img.Image? decodedImage = img.decodePng(pngBytes);
           if (decodedImage != null) {
-            return generator.imageRaster(decodedImage, align: PosAlign.center);
+            // Use generator.image (ESC * command) instead of generator.imageRaster (GS v 0 command)
+            // GS v 0 raster command causes garbled print on most 58mm Bluetooth printers.
+            return generator.image(decodedImage, align: PosAlign.center);
           }
         }
       }
@@ -250,7 +258,7 @@ class BluetoothPrinterHelper {
 
   /// Generate a digital web receipt URL
   String generateReceiptUrl(String invoice, DateTime date, List<dynamic> items, int total) {
-    final String formattedDate = DateFormat('dd MMM yyyy, HH:mm').format(date);
+    final String formattedDate = DateFormat('dd/MM/yy HH:mm').format(date);
     final List<String> itemStrings = [];
     for (var item in items) {
       final String name = item['name'] ?? '';
@@ -261,10 +269,10 @@ class BluetoothPrinterHelper {
     }
     final String itemsParam = itemStrings.join(',');
     final String url = "$receiptBaseUrl"
-        "?invoice=${Uri.encodeComponent(invoice)}"
-        "&date=${Uri.encodeComponent(formattedDate)}"
-        "&total=$total"
-        "&items=$itemsParam";
+        "?inv=${Uri.encodeComponent(invoice)}"
+        "&d=${Uri.encodeComponent(formattedDate)}"
+        "&t=$total"
+        "&i=$itemsParam";
     print("DEBUG RECEIPT URL: $url");
     return url;
   }
