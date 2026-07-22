@@ -15,7 +15,7 @@ class BluetoothPrinterHelper {
 
   // Ubah URL di bawah ini ke domain Vercel Anda setelah dideploy
   // Contoh: static const String receiptBaseUrl = "https://ican-receipt.vercel.app";
-  static const String receiptBaseUrl = "https://rincian-pembayarann.vercel.app";
+  static const String receiptBaseUrl = "https://rinciann-pembayarann.vercel.app";
 
   static const String _prefAddressKey = 'bluetooth_printer_address';
   static const String _prefNameKey = 'bluetooth_printer_name';
@@ -27,7 +27,7 @@ class BluetoothPrinterHelper {
   String? get savedName => _savedName;
 
   /// Helper to generate QR Code as a pixel-perfect image and return ESC/POS bytes.
-  /// Renders exact 1-bit black & white matrix without anti-aliasing to prevent bold/smudged output on thermal paper.
+  /// Renders exact 1-bit black & white matrix with 8-bit byte alignment to prevent distortion, shearing or smudging on thermal paper.
   Future<List<int>> _generateQrCodeBytes(String data, Generator generator) async {
     try {
       final qrValidationResult = QrValidator.validate(
@@ -43,15 +43,21 @@ class BluetoothPrinterHelper {
         const int quietZone = 4; // Standard 4-module quiet zone required by QR spec
         final int totalModules = matrixSize + (quietZone * 2);
         
-        // Target ~180-220px image size for 58mm thermal printers (384 dots printable width)
-        int scale = 5;
+        // Target ~180-224px image size for 58mm thermal printers (384 dots printable width)
+        int scale = 6;
+        if (totalModules * 6 > 240) {
+          scale = 5;
+        }
         if (totalModules * 5 > 240) {
           scale = 4;
-        } else if (totalModules * 5 < 160) {
-          scale = 6;
         }
         
-        final int imageSize = totalModules * scale;
+        final int rawSize = totalModules * scale;
+        // CRITICAL: Force imageSize to be an exact multiple of 8 (byte-aligned).
+        // Prevents raster line byte remainder shift/shearing on thermal printer drivers!
+        final int imageSize = ((rawSize + 7) ~/ 8) * 8;
+        final int extraPadding = (imageSize - rawSize) ~/ 2;
+        
         final img.Image qrImage = img.Image(width: imageSize, height: imageSize);
         
         // Fill background with solid white
@@ -65,11 +71,13 @@ class BluetoothPrinterHelper {
         for (int r = 0; r < matrixSize; r++) {
           for (int c = 0; c < matrixSize; c++) {
             if (qrImageMatrix.isDark(r, c)) {
-              final int startX = (c + quietZone) * scale;
-              final int startY = (r + quietZone) * scale;
+              final int startX = extraPadding + ((c + quietZone) * scale);
+              final int startY = extraPadding + ((r + quietZone) * scale);
               for (int py = 0; py < scale; py++) {
                 for (int px = 0; px < scale; px++) {
-                  qrImage.setPixelRgb(startX + px, startY + py, 0, 0, 0);
+                  if (startX + px < imageSize && startY + py < imageSize) {
+                    qrImage.setPixelRgb(startX + px, startY + py, 0, 0, 0);
+                  }
                 }
               }
             }
@@ -82,7 +90,7 @@ class BluetoothPrinterHelper {
       print("Error generating QR code image: $e");
     }
     // Fallback to native ESC/POS QR code command if matrix rendering fails
-    return generator.qrcode(data);
+    return generator.qrcode(data, align: PosAlign.center);
   }
 
   /// Initialize and try to auto-connect to the saved printer
@@ -238,7 +246,7 @@ class BluetoothPrinterHelper {
       bytes += generator.feed(1);
 
       // Print Test QR Code
-      const testQrUrl = '$receiptBaseUrl?invoice=TEST-12345&date=16%20Jul%202026,%2019:00&total=10000&items=Tes%20Printer%20Porina:1:10000';
+      const testQrUrl = '$receiptBaseUrl?inv=TEST-12345';
       bytes += await _generateQrCodeBytes(testQrUrl, generator);
       bytes += generator.feed(1);
 
@@ -254,22 +262,9 @@ class BluetoothPrinterHelper {
   }
 
   /// Generate a digital web receipt URL
-  String generateReceiptUrl(String invoice, DateTime date, List<dynamic> items, int total) {
-    final String formattedDate = DateFormat('dd/MM/yy HH:mm').format(date);
-    final List<String> itemStrings = [];
-    for (var item in items) {
-      final String name = item['name'] ?? '';
-      final encodedName = Uri.encodeComponent(name);
-      final qty = item['qty'] ?? 0;
-      final price = item['price'] ?? 0;
-      itemStrings.add('$encodedName:$qty:$price');
-    }
-    final String itemsParam = itemStrings.join(',');
-    final String url = "$receiptBaseUrl"
-        "?inv=${Uri.encodeComponent(invoice)}"
-        "&d=${Uri.encodeComponent(formattedDate)}"
-        "&t=$total"
-        "&i=$itemsParam";
+  String generateReceiptUrl(String invoice, [DateTime? date, List<dynamic>? items, int? total]) {
+    final String cleanInvoice = Uri.encodeComponent(invoice);
+    final String url = "$receiptBaseUrl?inv=$cleanInvoice";
     print("DEBUG RECEIPT URL: $url");
     return url;
   }
@@ -324,13 +319,14 @@ class BluetoothPrinterHelper {
       );
       bytes += generator.feed(1);
 
+      final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+
       // Metadata
       bytes += generator.text('Invoice : $invoice');
       bytes += generator.text('Tanggal : ${DateFormat('dd MMM yyyy, HH:mm').format(date)}');
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
       // Items Column Headers (58mm width is 32 columns typically)
-      // We will print "Item" (width 6), "Qty x Harga" (width 3), "Total" (width 3)
       bytes += generator.row([
         PosColumn(text: 'Item', width: 5, styles: const PosStyles(bold: true)),
         PosColumn(text: 'Harga/Qty', width: 4, styles: const PosStyles(bold: true, align: PosAlign.right)),
@@ -345,18 +341,20 @@ class BluetoothPrinterHelper {
         final price = item['price'] ?? 0;
         final itemTotal = qty * price;
 
-        if (name.length > 15) {
+        final formattedPrice = currencyFormatter.format(price);
+        final formattedTotal = currencyFormatter.format(itemTotal);
+
+        if (name.length > 12) {
           bytes += generator.text(name);
           bytes += generator.row([
-            PosColumn(text: '', width: 2),
-            PosColumn(text: '$qty x $price', width: 6, styles: const PosStyles(align: PosAlign.right)),
-            PosColumn(text: '$itemTotal', width: 4, styles: const PosStyles(align: PosAlign.right)),
+            PosColumn(text: '  $qty x $formattedPrice', width: 7, styles: const PosStyles(align: PosAlign.left)),
+            PosColumn(text: formattedTotal, width: 5, styles: const PosStyles(align: PosAlign.right)),
           ]);
         } else {
           bytes += generator.row([
             PosColumn(text: name, width: 5),
-            PosColumn(text: '$qty x $price', width: 4, styles: const PosStyles(align: PosAlign.right)),
-            PosColumn(text: '$itemTotal', width: 3, styles: const PosStyles(align: PosAlign.right)),
+            PosColumn(text: '$qty x $formattedPrice', width: 4, styles: const PosStyles(align: PosAlign.right)),
+            PosColumn(text: formattedTotal, width: 3, styles: const PosStyles(align: PosAlign.right)),
           ]);
         }
       }
@@ -365,8 +363,8 @@ class BluetoothPrinterHelper {
 
       // Total Row
       bytes += generator.row([
-        PosColumn(text: 'Total Belanja', width: 7, styles: const PosStyles(bold: true)),
-        PosColumn(text: 'Rp $total', width: 5, styles: const PosStyles(bold: true, align: PosAlign.right)),
+        PosColumn(text: 'Total Belanja', width: 6, styles: const PosStyles(bold: true)),
+        PosColumn(text: currencyFormatter.format(total), width: 6, styles: const PosStyles(bold: true, align: PosAlign.right)),
       ]);
 
       bytes += generator.feed(1);

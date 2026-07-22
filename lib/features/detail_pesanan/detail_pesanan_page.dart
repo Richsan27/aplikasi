@@ -324,24 +324,31 @@ class DetailPesananPage extends StatelessWidget {
                     // Visual QR Code
                     Center(
                       child: Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: const Color(0xFFE5E7EB),
                             width: 1.5,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.03),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: QrImageView(
                           data: () {
                             final helper = BluetoothPrinterHelper();
-                            final date = createdAt.toDate();
-                            return helper.generateReceiptUrl(invoice, date, items, total);
+                            return helper.generateReceiptUrl(invoice);
                           }(),
                           version: QrVersions.auto,
-                          size: 140.0,
+                          size: 160.0,
                           gapless: false,
+                          errorCorrectionLevel: QrErrorCorrectLevel.L,
                         ),
                       ),
                     ),
