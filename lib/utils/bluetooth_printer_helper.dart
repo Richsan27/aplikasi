@@ -86,7 +86,10 @@ class BluetoothPrinterHelper {
           }
         }
 
-        return generator.image(qrImage, align: PosAlign.center);
+        // Gunakan imageRaster (GS v 0) bukan image (ESC *) agar tidak merusak state printer
+        // ESC * (column format) memerlukan rotasi 270° dan flip horizontal → rentan corrupt state
+        // GS v 0 (raster format) lebih bersih: cetak baris demi baris tanpa rotasi
+        return generator.imageRaster(qrImage, align: PosAlign.center);
       }
     } catch (e) {
       print("Error generating QR code image: $e");
