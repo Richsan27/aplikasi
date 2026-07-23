@@ -95,8 +95,8 @@ class BluetoothPrinterHelper {
     return generator.qrcode(
       data,
       align: PosAlign.center,
-      size: 4, // ukuran modul native QR
-      errorCorrectLevel: QrErrorCorrectLevel.M,
+      size: QRSize.size4,
+      cor: QRCorrection.M,
     );
   }
 
