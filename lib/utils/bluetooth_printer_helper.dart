@@ -256,6 +256,8 @@ class BluetoothPrinterHelper {
       const testQrUrl = '$receiptBaseUrl?inv=TEST-12345';
       bytes += await _generateQrCodeBytes(testQrUrl, generator);
       bytes += generator.feed(1);
+      // PENTING: reset printer setelah cetak gambar QR
+      bytes += generator.reset();
 
       bytes += generator.feed(1);
       bytes += generator.cut();
@@ -380,6 +382,8 @@ class BluetoothPrinterHelper {
       final receiptUrl = generateReceiptUrl(invoice, date, items, total);
       bytes += await _generateQrCodeBytes(receiptUrl, generator);
       bytes += generator.feed(1);
+      // PENTING: reset printer setelah cetak gambar QR agar teks berikutnya tidak rusak
+      bytes += generator.reset();
 
       bytes += generator.text(
         'Terima Kasih',
