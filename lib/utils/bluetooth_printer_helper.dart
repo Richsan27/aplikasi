@@ -27,70 +27,77 @@ class BluetoothPrinterHelper {
   String? get savedName => _savedName;
 
   /// Helper to generate QR Code as a pixel-perfect image and return ESC/POS bytes.
-  /// Renders exact 1-bit black & white matrix with 8-bit byte alignment to prevent distortion, shearing or smudging on thermal paper.
+  /// Renders exact 1-bit black & white matrix with 8-bit byte alignment to prevent distortion.
+  /// Fix: r=row=Y axis, c=column=X axis (sesuai konvensi QR matrix).
   Future<List<int>> _generateQrCodeBytes(String data, Generator generator) async {
     try {
       final qrValidationResult = QrValidator.validate(
         data: data,
         version: QrVersions.auto,
-        errorCorrectionLevel: QrErrorCorrectLevel.L,
+        errorCorrectionLevel: QrErrorCorrectLevel.M, // Naikkan ke M agar lebih tahan error
       );
-      
+
       if (qrValidationResult.status == QrValidationStatus.valid) {
         final qrCode = qrValidationResult.qrCode!;
         final qrImageMatrix = QrImage(qrCode);
         final int matrixSize = qrImageMatrix.moduleCount;
-        const int quietZone = 4; // Standard 4-module quiet zone required by QR spec
+        const int quietZone = 4; // Standard 4-module quiet zone
+
+        // Hitung scale: minimal 5px per modul agar QR terbaca scanner
         final int totalModules = matrixSize + (quietZone * 2);
-        
-        // Target ~180-224px image size for 58mm thermal printers (384 dots printable width)
         int scale = 6;
-        if (totalModules * 6 > 240) {
-          scale = 5;
-        }
-        if (totalModules * 5 > 240) {
-          scale = 4;
-        }
-        
-        final int rawSize = totalModules * scale;
-        // CRITICAL: Force imageSize to be an exact multiple of 8 (byte-aligned).
-        // Prevents raster line byte remainder shift/shearing on thermal printer drivers!
-        final int imageSize = ((rawSize + 7) ~/ 8) * 8;
-        final int extraPadding = (imageSize - rawSize) ~/ 2;
-        
+        if (totalModules * 6 > 280) scale = 5;
+        if (totalModules * 5 > 280) scale = 4;
+        // Jangan kurang dari 4 - di bawah itu QR tidak terbaca
+        if (scale < 4) scale = 4;
+
+        // Ukuran area QR (termasuk quiet zone)
+        final int qrAreaSize = totalModules * scale;
+
+        // CRITICAL: imageSize harus kelipatan 8 (byte-aligned) agar tidak geser di thermal printer
+        final int imageSize = ((qrAreaSize + 7) ~/ 8) * 8;
+
+        // Offset tengah agar QR tepat di pusat gambar
+        final int offset = (imageSize - qrAreaSize) ~/ 2;
+
         final img.Image qrImage = img.Image(width: imageSize, height: imageSize);
-        
-        // Fill background with solid white
-        for (int y = 0; y < imageSize; y++) {
-          for (int x = 0; x < imageSize; x++) {
-            qrImage.setPixelRgb(x, y, 255, 255, 255);
-          }
-        }
-        
-        // Draw exact crisp black QR modules (no anti-aliasing, no edge bloating)
-        for (int r = 0; r < matrixSize; r++) {
-          for (int c = 0; c < matrixSize; c++) {
-            if (qrImageMatrix.isDark(r, c)) {
-              final int startX = extraPadding + ((c + quietZone) * scale);
-              final int startY = extraPadding + ((r + quietZone) * scale);
-              for (int py = 0; py < scale; py++) {
-                for (int px = 0; px < scale; px++) {
-                  if (startX + px < imageSize && startY + py < imageSize) {
-                    qrImage.setPixelRgb(startX + px, startY + py, 0, 0, 0);
+
+        // Fill background: putih solid
+        img.fill(qrImage, color: img.ColorRgb8(255, 255, 255));
+
+        // Gambar modul QR: r = baris (Y), c = kolom (X) — penting tidak tertukar!
+        for (int row = 0; row < matrixSize; row++) {
+          for (int col = 0; col < matrixSize; col++) {
+            if (qrImageMatrix.isDark(row, col)) {
+              // col → sumbu X, row → sumbu Y
+              final int pixelX = offset + (quietZone + col) * scale;
+              final int pixelY = offset + (quietZone + row) * scale;
+
+              for (int dy = 0; dy < scale; dy++) {
+                for (int dx = 0; dx < scale; dx++) {
+                  final int px = pixelX + dx;
+                  final int py = pixelY + dy;
+                  if (px < imageSize && py < imageSize) {
+                    qrImage.setPixelRgb(px, py, 0, 0, 0);
                   }
                 }
               }
             }
           }
         }
-        
+
         return generator.image(qrImage, align: PosAlign.center);
       }
     } catch (e) {
       print("Error generating QR code image: $e");
     }
-    // Fallback to native ESC/POS QR code command if matrix rendering fails
-    return generator.qrcode(data, align: PosAlign.center);
+    // Fallback: pakai perintah QR native ESC/POS jika rendering gagal
+    return generator.qrcode(
+      data,
+      align: PosAlign.center,
+      size: 4, // ukuran modul native QR
+      errorCorrectLevel: QrErrorCorrectLevel.M,
+    );
   }
 
   /// Initialize and try to auto-connect to the saved printer
