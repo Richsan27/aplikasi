@@ -3,8 +3,7 @@ import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:intl/intl.dart';
-import 'package:image/image.dart' as img;
-import 'package:qr_flutter/qr_flutter.dart';
+
 
 
 class BluetoothPrinterHelper {
@@ -26,80 +25,14 @@ class BluetoothPrinterHelper {
   String? get savedAddress => _savedAddress;
   String? get savedName => _savedName;
 
-  /// Helper to generate QR Code as a pixel-perfect image and return ESC/POS bytes.
-  /// Renders exact 1-bit black & white matrix with 8-bit byte alignment to prevent distortion.
-  /// Fix: r=row=Y axis, c=column=X axis (sesuai konvensi QR matrix).
+  /// Generate QR Code menggunakan perintah native ESC/POS (GS ( k).
+  /// Printer yang render sendiri — paling bersih, tidak merusak state, selalu terbaca.
   Future<List<int>> _generateQrCodeBytes(String data, Generator generator) async {
-    try {
-      final qrValidationResult = QrValidator.validate(
-        data: data,
-        version: QrVersions.auto,
-        errorCorrectionLevel: QrErrorCorrectLevel.M, // Naikkan ke M agar lebih tahan error
-      );
-
-      if (qrValidationResult.status == QrValidationStatus.valid) {
-        final qrCode = qrValidationResult.qrCode!;
-        final qrImageMatrix = QrImage(qrCode);
-        final int matrixSize = qrImageMatrix.moduleCount;
-        const int quietZone = 4; // Standard 4-module quiet zone
-
-        // Hitung scale: minimal 5px per modul agar QR terbaca scanner
-        final int totalModules = matrixSize + (quietZone * 2);
-        int scale = 6;
-        if (totalModules * 6 > 280) scale = 5;
-        if (totalModules * 5 > 280) scale = 4;
-        // Jangan kurang dari 4 - di bawah itu QR tidak terbaca
-        if (scale < 4) scale = 4;
-
-        // Ukuran area QR (termasuk quiet zone)
-        final int qrAreaSize = totalModules * scale;
-
-        // CRITICAL: imageSize harus kelipatan 8 (byte-aligned) agar tidak geser di thermal printer
-        final int imageSize = ((qrAreaSize + 7) ~/ 8) * 8;
-
-        // Offset tengah agar QR tepat di pusat gambar
-        final int offset = (imageSize - qrAreaSize) ~/ 2;
-
-        final img.Image qrImage = img.Image(width: imageSize, height: imageSize);
-
-        // Fill background: putih solid
-        img.fill(qrImage, color: img.ColorRgb8(255, 255, 255));
-
-        // Gambar modul QR: r = baris (Y), c = kolom (X) — penting tidak tertukar!
-        for (int row = 0; row < matrixSize; row++) {
-          for (int col = 0; col < matrixSize; col++) {
-            if (qrImageMatrix.isDark(row, col)) {
-              // col → sumbu X, row → sumbu Y
-              final int pixelX = offset + (quietZone + col) * scale;
-              final int pixelY = offset + (quietZone + row) * scale;
-
-              for (int dy = 0; dy < scale; dy++) {
-                for (int dx = 0; dx < scale; dx++) {
-                  final int px = pixelX + dx;
-                  final int py = pixelY + dy;
-                  if (px < imageSize && py < imageSize) {
-                    qrImage.setPixelRgb(px, py, 0, 0, 0);
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Gunakan imageRaster (GS v 0) bukan image (ESC *) agar tidak merusak state printer
-        // ESC * (column format) memerlukan rotasi 270° dan flip horizontal → rentan corrupt state
-        // GS v 0 (raster format) lebih bersih: cetak baris demi baris tanpa rotasi
-        return generator.imageRaster(qrImage, align: PosAlign.center);
-      }
-    } catch (e) {
-      print("Error generating QR code image: $e");
-    }
-    // Fallback: pakai perintah QR native ESC/POS jika rendering gagal
     return generator.qrcode(
       data,
       align: PosAlign.center,
-      size: QRSize.size4,
-      cor: QRCorrection.M,
+      size: QRSize.size6,       // ukuran modul: 1-8, 6 = cukup besar untuk 58mm
+      cor: QRCorrection.M,      // error correction 15% — tahan kualitas cetak thermal
     );
   }
 
