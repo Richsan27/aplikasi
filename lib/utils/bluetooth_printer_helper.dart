@@ -264,22 +264,22 @@ class BluetoothPrinterHelper {
       );
       bytes += generator.feed(1);
 
-      final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+      final currencyFormatter = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp', decimalDigits: 0);
 
       // Metadata
       bytes += generator.text('Invoice : $invoice');
       bytes += generator.text('Tanggal : ${DateFormat('dd MMM yyyy, HH:mm').format(date)}');
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
-      // Items Column Headers (58mm width is 32 columns typically)
+      // Items Column Headers
       bytes += generator.row([
-        PosColumn(text: 'Item', width: 5, styles: const PosStyles(bold: true)),
-        PosColumn(text: 'Harga/Qty', width: 4, styles: const PosStyles(bold: true, align: PosAlign.right)),
-        PosColumn(text: 'Total', width: 3, styles: const PosStyles(bold: true, align: PosAlign.right)),
+        PosColumn(text: 'Item', width: 7, styles: const PosStyles(bold: true)),
+        PosColumn(text: 'Harga/Qty', width: 3, styles: const PosStyles(bold: true, align: PosAlign.center)),
+        PosColumn(text: 'Total', width: 2, styles: const PosStyles(bold: true, align: PosAlign.right)),
       ]);
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
 
-      // Print Items
+      // Print Items — nama selalu baris sendiri, detail di bawahnya
       for (var item in items) {
         final name = item['name'] ?? '';
         final qty = item['qty'] ?? 0;
@@ -289,19 +289,13 @@ class BluetoothPrinterHelper {
         final formattedPrice = currencyFormatter.format(price);
         final formattedTotal = currencyFormatter.format(itemTotal);
 
-        if (name.length > 12) {
-          bytes += generator.text(name);
-          bytes += generator.row([
-            PosColumn(text: '  $qty x $formattedPrice', width: 7, styles: const PosStyles(align: PosAlign.left)),
-            PosColumn(text: formattedTotal, width: 5, styles: const PosStyles(align: PosAlign.right)),
-          ]);
-        } else {
-          bytes += generator.row([
-            PosColumn(text: name, width: 5),
-            PosColumn(text: '$qty x $formattedPrice', width: 4, styles: const PosStyles(align: PosAlign.right)),
-            PosColumn(text: formattedTotal, width: 3, styles: const PosStyles(align: PosAlign.right)),
-          ]);
-        }
+        // Nama item
+        bytes += generator.text(name);
+        // Detail: qty x harga | total — kolom lebih lebar agar angka tidak terpotong
+        bytes += generator.row([
+          PosColumn(text: '  $qty x $formattedPrice', width: 7, styles: const PosStyles(align: PosAlign.left)),
+          PosColumn(text: formattedTotal, width: 5, styles: const PosStyles(align: PosAlign.right)),
+        ]);
       }
 
       bytes += generator.text('--------------------------------', styles: const PosStyles(align: PosAlign.center));
